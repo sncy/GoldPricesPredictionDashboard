@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gold Price Forecasting</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@1.3.0"></script>
+    <style>
+        .trade-opinion-wrapper {
+            padding: 1rem;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: white;
+            margin-bottom: 0.5rem;
+        }
+
+        .trade-decision-wrapper {
+            padding: 0.2rem;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 1rem;
+            font-weight: bold;
+            color: white;
+        }
+
+        .trade-decision-row {
+            margin-top: 0.4rem;
+        }
+
+        .trade-decision-words {
+            color: rgb(153, 153, 153);
+        }
+
+        .green {
+            background-color: rgb(171, 235, 198);
+        }
+
+        .red {
+            background-color: rgb(245, 183, 177);
+        }
+
+        .grey {
+            background-color: rgb(171, 178, 185);
+        }
+
+        .light-blue {
+            background-color: rgb(135, 206, 250);
+        }
+
+        @media screen and (max-width: 480px) {
+            .chart-container {
+                height: 250px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row" style="height: 100vh; padding: 1rem;">
+            <div class="col-md-3">
+                <div class="chart-container" style="height: 50%;">
+                    <div style="height: 100%; display: flex; justify-content: center; align-items: center;">
+                        <canvas id="doughnutChart" style="height: 100%; width: 100%;"></canvas>
+                    </div>
+                </div>
+                <div style="height: 50%;">
+                    <div class="row">
+                        <div class="trade-opinion-wrapper {{ 'green' if to_trade_opinion_value == 'Buy' else 'red' if to_trade_opinion_value == 'Sell' 
+                                    else 'light-blue' if to_trade_opinion_value == 'Close Market' else 'grey' }}">
+                            {{ to_trade_opinion_value }}
+                        </div> 
+                    </div>   
+                    <div class="row trade-decision-row">
+                        <div class="col-md-8 trade-decision-words">
+                            <h6>Next Predicted Prices</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="trade-decision-wrapper {{ 'green' if to_trade_opinion_predBased == 'Buy' else 'red' if to_trade_opinion_predBased == 'Sell' 
+                                        else 'grey' if to_trade_opinion_predBased == 'Hold' else 'light-blue' if to_trade_opinion_predBased == 'Close Market'}}">
+                                {{ to_today_pred }}
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row trade-decision-row">
+                        <div class="col-md-8 trade-decision-words">
+                            <h6>RSI</h6>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="trade-decision-wrapper {{ 'green' if to_trade_opinion_rsiBased == 'Buy' else 'red' if to_trade_opinion_rsiBased == 'Sell' 
+                                        else 'grey' if to_trade_opinion_rsiBased == 'Hold' else 'light-blue' if to_trade_opinion_rsiBased == 'Close Market'}}">
+                                {{ to_lastDay_rsi }} 
+                            </div>
+                        </div>
+                    </div>  
+                </div>
+            </div>
+            <div class="col-md-9">
+                <div style="height: 70%;">
+                    <canvas id="myChart"></canvas>
+                </div>
+                <div style="height: 30%;">
+                    <canvas id="rsiChart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const fc_date = {{ fc_date|tojson }};
+        const fc_pred = {{ fc_pred|tojson }};
+        const fc_actual = {{ fc_actual|tojson }};
+        const fc_rsi = {{ fc_rsi|tojson }};
+
+        function createChart() {
+            const ctx = document.getElementById('myChart').getContext('2d');
+            const myChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: fc_date,
+                    datasets: [{
+                        label: 'Predicted Gold Price',
+                        data: fc_pred,
+                        borderColor: 'rgb(0, 153, 255)', // A shade of blue
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgb(0, 153, 255)',
+                        pointRadius: 2 // Set a size for the marker points
+                    }, {
+                        label: 'Actual Gold Price',
+                        data: fc_actual,
+                        borderColor: 'rgba(0, 0, 0, 0.5)', // A shade of grey
+                        borderWidth: 2,
+                        pointBackgroundColor: 'rgba(0, 0, 0, 0.3)',
+                        pointRadius: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                autoSkip: true,
+                                maxTicksLimit: 10 // Set the maximum number of ticks to display on the x-axis
+                            }
+                        },
+                        y: {
+                            beginAtZero: false,
+                            grid: {
+                                display: false
+                            },
+                            title: {
+                                display: true,
+                                text: 'dollar per ounce',
+                                font: {
+                                    size: 14
+                                },
+                                padding: {
+                                    top: 10,
+                                    bottom: 10
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function createRsiChart() {
+            const ctx = document.getElementById('rsiChart').getContext('2d');
+            const rsiChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: fc_date,
+                    datasets: [{
+                        label: 'RSI',
+                        data: fc_rsi,
+                        borderColor: 'rgba(255, 159, 64, 1)',
+                        borderWidth: 2,
+                        pointRadius: 1,
+                        tension: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            display: false, // Hide x-axis labels
+                            grid: {
+                                display: false
+                            }
+                        },
+                        y: {
+                            min: 0,
+                            max: 100,
+                            beginAtZero: true,
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                padding: 9,
+                            },
+                            title: {
+                                display: true,
+                                text: 'RSI values',
+                                font: {
+                                    size: 14
+                                },
+                                padding: {
+                                    top: 10,
+                                    bottom: 10
+                                }
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            display: true,
+                            labels: {
+                                boxHeight: 1,
+                            }
+                        },
+                        annotation: {
+                            annotations: [
+                                {
+                                    type: 'box',
+                                    yScaleID: 'y',
+                                    yMin: 30,
+                                    yMax: 70,
+                                    borderColor: 'rgba(128, 128, 128, 0.5)',
+                                    backgroundColor: 'rgba(128, 128, 128, 0.1)',
+                                },
+                            ],
+                        },
+                    },
+                },
+            });
+        }
+
+        function createDoughnutChart(winning_rate_percentage) {
+            const ctx = document.getElementById('doughnutChart').getContext('2d');
+            const losing_rate_percentage = 100 - winning_rate_percentage;
+
+            const doughnutChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {                    
+                    datasets: [{
+                        label: 'My First Dataset',
+                        data: [winning_rate_percentage, losing_rate_percentage],
+                        backgroundColor: [
+                            'rgb(102, 255, 102)', // Green
+                            'rgb(255, 99, 132)' // Red
+                        ],
+                    }]
+                },
+                options: {
+                    responsive: true,  // This makes the chart responsive
+                    maintainAspectRatio: false,  // This allows the chart to resize according to container dimensions
+                    cutout: '75%',
+                    events: [], // Disable all interactions
+                    animation: {
+                        onComplete: function() {
+                            const centerX = doughnutChart.chartArea.left + doughnutChart.chartArea.width / 2;
+                            const centerY = doughnutChart.chartArea.top + doughnutChart.chartArea.height / 2;
+                            let fontSize = Math.min(Math.max(document.documentElement.clientWidth / 40, 20), 40);  // Control the size range
+                            ctx.font = fontSize + 'px Arial';
+                            ctx.fillStyle = '#999999';
+                            ctx.textAlign = 'center';
+                            ctx.fillText(winning_rate_percentage.toFixed(2) + '%', centerX, centerY);
+                            
+                            fontSize = fontSize*0.4;
+                            ctx.font = fontSize + 'px Arial';
+                            ctx.fillText('winning rate', centerX, centerY + 25);
+                        }
+                    }
+                },
+            });
+        }
+
+        createChart();
+        createRsiChart();
+        createDoughnutChart({{ wr_winning_rate }});
+    </script>
+</body>
+</html>
